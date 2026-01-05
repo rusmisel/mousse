@@ -27,6 +27,7 @@ static int shmfd;
 static uint32_t *frame = NULL;
 static size_t frame_size = 0;
 static bool framewritable = false, immediateredraw = false;
+static bool enterbeenpressed = false;
 static uint32_t fw = 0, fh = 0, frame_stride = 0;
 static uint32_t x = 1, y = 1, xe = 2, ye = 2;
 static uint8_t ui = 0;
@@ -151,7 +152,9 @@ static void onkey(void *d, struct wl_keyboard *keeb, uint32_t serial,
   case KEY_ENTER: {
     zwlr_virtual_pointer_v1_button(vp, 0, BTN_LEFT, state);
     zwlr_virtual_pointer_v1_frame(vp);
-    if (!state)
+    if (!enterbeenpressed && state == WL_KEYBOARD_KEY_STATE_PRESSED)
+      enterbeenpressed = true;
+    if (!state && enterbeenpressed)
       done = true;
     break;
   }
