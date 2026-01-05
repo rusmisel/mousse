@@ -1,4 +1,3 @@
-CC:=clang
 PREFIX:=${HOME}/.local
 WLPROTOS=wlr-protocols/unstable/wlr-layer-shell-unstable-v1.xml wlr-protocols/unstable/wlr-virtual-pointer-unstable-v1.xml wayland-protocols/stable/xdg-shell/xdg-shell.xml
 WLCODE=$(patsubst %.xml,proto/%.c,$(WLPROTOS))

@@ -1,7 +1,6 @@
 #include "proto/wayland-protocols/stable/xdg-shell/xdg-shell.h"
 #include "proto/wlr-protocols/unstable/wlr-layer-shell-unstable-v1.h"
 #include "proto/wlr-protocols/unstable/wlr-virtual-pointer-unstable-v1.h"
-#include <asm-generic/errno-base.h>
 #include <fcntl.h>
 #include <linux/input-event-codes.h>
 #include <stdbool.h>
@@ -51,8 +50,6 @@ static void draw() {
   wl_surface_damage_buffer(surface, 0, 0, fw, fh);
   wl_surface_commit(surface);
 }
-
-static void noop() {}
 
 static void global(void *_, struct wl_registry *reg, uint32_t id,
                    const char *iface, uint32_t ver) {
@@ -131,53 +128,46 @@ static struct zwlr_layer_surface_v1_listener lsl = {
 static void onkey(void *d, struct wl_keyboard *keeb, uint32_t serial,
                   uint32_t time, uint32_t key, uint32_t state) {
   switch (key) {
-  case 1: {
-    // ESC
+  case KEY_ESC: {
     done = true;
     return;
   }
-  case 28: {
-    // ENTER
+  case KEY_ENTER: {
     zwlr_virtual_pointer_v1_button(vp, 0, BTN_LEFT, state);
     zwlr_virtual_pointer_v1_frame(vp);
     if (!state)
       done = true;
     break;
   }
-  case 57: {
-    // SPACE
+  case KEY_SPACE: {
     zwlr_virtual_pointer_v1_button(vp, 0, BTN_RIGHT, state);
     zwlr_virtual_pointer_v1_frame(vp);
     if (!state)
       done = true;
     break;
   }
-  case 35: {
-    // h
+  case KEY_H: {
     if (state != WL_KEYBOARD_KEY_STATE_PRESSED)
       return;
     x = x * 2 - 1;
     xe *= 2;
     break;
   }
-  case 36: {
-    // j
+  case KEY_J: {
     if (state != WL_KEYBOARD_KEY_STATE_PRESSED)
       return;
     y = y * 2 + 1;
     ye *= 2;
     break;
   }
-  case 37: {
-    // k
+  case KEY_K: {
     if (state != WL_KEYBOARD_KEY_STATE_PRESSED)
       return;
     y = y * 2 - 1;
     ye *= 2;
     break;
   }
-  case 38: {
-    // l
+  case KEY_L: {
     if (state != WL_KEYBOARD_KEY_STATE_PRESSED)
       return;
     x = x * 2 + 1;
@@ -187,12 +177,7 @@ static void onkey(void *d, struct wl_keyboard *keeb, uint32_t serial,
   }
   draw();
 }
-static struct wl_keyboard_listener kl = {.enter = noop,
-                                         .leave = noop,
-                                         .keymap = noop,
-                                         .key = onkey,
-                                         .modifiers = noop,
-                                         .repeat_info = noop};
+static struct wl_keyboard_listener kl = {.key = onkey};
 
 int main() {
   shmfd = shm_open(SHM_NAME, O_RDWR | O_CREAT | O_EXCL, 0600);
