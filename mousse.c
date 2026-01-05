@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <linux/input-event-codes.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/mman.h>
@@ -28,6 +29,9 @@ static size_t frame_size = 0;
 static bool framewritable = false, immediateredraw = false;
 static uint32_t fw = 0, fh = 0, frame_stride = 0;
 static uint32_t x = 1, y = 1, xe = 2, ye = 2;
+static uint8_t ui = 0;
+static bool uvert[UINT8_MAX];
+static bool upos[UINT8_MAX];
 static char *err = NULL;
 static bool done = false;
 
@@ -125,6 +129,18 @@ static void layer_shell_closed(void *_, struct zwlr_layer_surface_v1 *s) {
 static struct zwlr_layer_surface_v1_listener lsl = {
     .configure = layer_shell_config, .closed = layer_shell_closed};
 
+void onenter(void *_, struct wl_keyboard *keeb, uint32_t serial,
+             struct wl_surface *s, struct wl_array *keys) {}
+void onleave(void *_, struct wl_keyboard *keeb, uint32_t serial,
+             struct wl_surface *s) {}
+void onmodifiers(void *_, struct wl_keyboard *keeb, uint32_t serial,
+                 uint32_t depressed, uint32_t latched, uint32_t locked,
+                 uint32_t keyboard) {}
+
+void onrepeatinfo(void *_, struct wl_keyboard *keeb, int32_t rate,
+                  int32_t delay) {}
+void onkeymap(void *_, struct wl_keyboard *keeb, uint32_t fmt, int32_t fd,
+              uint32_t size) {}
 static void onkey(void *d, struct wl_keyboard *keeb, uint32_t serial,
                   uint32_t time, uint32_t key, uint32_t state) {
   switch (key) {
@@ -151,6 +167,11 @@ static void onkey(void *d, struct wl_keyboard *keeb, uint32_t serial,
       return;
     x = x * 2 - 1;
     xe *= 2;
+    uvert[ui] = false;
+    upos[ui] = false;
+    ui++;
+    if (!ui)
+      done = true;
     break;
   }
   case KEY_J: {
@@ -158,6 +179,11 @@ static void onkey(void *d, struct wl_keyboard *keeb, uint32_t serial,
       return;
     y = y * 2 + 1;
     ye *= 2;
+    uvert[ui] = true;
+    upos[ui] = true;
+    ui++;
+    if (!ui)
+      done = true;
     break;
   }
   case KEY_K: {
@@ -165,6 +191,11 @@ static void onkey(void *d, struct wl_keyboard *keeb, uint32_t serial,
       return;
     y = y * 2 - 1;
     ye *= 2;
+    uvert[ui] = true;
+    upos[ui] = false;
+    ui++;
+    if (!ui)
+      done = true;
     break;
   }
   case KEY_L: {
@@ -172,12 +203,31 @@ static void onkey(void *d, struct wl_keyboard *keeb, uint32_t serial,
       return;
     x = x * 2 + 1;
     xe *= 2;
+    uvert[ui] = false;
+    upos[ui] = true;
+    ui++;
+    if (!ui)
+      done = true;
+    break;
+  }
+  case KEY_U: {
+    if (!ui || state != WL_KEYBOARD_KEY_STATE_PRESSED)
+      return;
+    ui--;
+    *(uvert[ui] ? &y : &x) += upos[ui] ? -1 : 1;
+    *(uvert[ui] ? &y : &x) /= 2;
+    *(uvert[ui] ? &ye : &xe) /= 2;
     break;
   }
   }
   draw();
 }
-static struct wl_keyboard_listener kl = {.key = onkey};
+static struct wl_keyboard_listener kl = {.enter = onenter,
+                                         .leave = onleave,
+                                         .modifiers = onmodifiers,
+                                         .repeat_info = onrepeatinfo,
+                                         .keymap = onkeymap,
+                                         .key = onkey};
 
 int main() {
   shmfd = shm_open(SHM_NAME, O_RDWR | O_CREAT | O_EXCL, 0600);
