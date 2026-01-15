@@ -13,3 +13,5 @@ proto/%.h: /usr/share/%.xml
 .PHONY: install
 install: mousse
 	install mousse "${PREFIX}/bin"
+	mkdir -p "${PREFIX}/share/man/man1"
+	install -m644 mousse.1 "${PREFIX}/share/man/man1"
