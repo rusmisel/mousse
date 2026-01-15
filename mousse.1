@@ -1,0 +1,40 @@
+.TH "mousse" "1" "2026-06-01"
+.SH
+NAME
+.P
+mousse - vim keybindings for your mouse
+.SH
+SYNOPSIS
+.P
+\fBmousse\fR
+.SH
+DESCRIPTION
+.P
+mousse lets you binary-search your screen with vim keybindings,
+and perform mouse input events.
+.SH
+KEYBINDINGS
+.P
+\fBh\fR \fBj\fR \fBk\fR and \fBl\fR
+divide the selection zone in half,
+directionally corresponding to vim movements
+.P
+\fBu\fR is for undo
+.P
+\fBESC\fR exits mousse.
+.P
+\fBEnter\fR performs a left click
+.P
+\fBSpace\fR performs a right click
+.SH
+BUGS
+.P
+mousse SEGVs in wsl.
+(this is a feature, using windows is the bug)
+.P
+mousse depends on the
+\fIwlr-layer-shell-unstable-v1\fR
+and
+\fIwlr-virtual-pointer-unstable-v1\fR
+wayland protocols.
+in compositors that don't support them, it will segv

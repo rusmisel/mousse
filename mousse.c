@@ -13,6 +13,11 @@
 #include <wayland-client-protocol.h>
 #include <wayland-client.h>
 
+enum mode {
+  MODE_NORMAL,
+  MODE_VISUAL,
+};
+
 static const char *SHM_NAME = "/mousse";
 static struct wl_compositor *compositor = NULL;
 static struct wl_seat *seat = NULL;
@@ -24,12 +29,12 @@ static struct zwlr_layer_surface_v1 *layer_surface = NULL;
 static struct zwlr_virtual_pointer_manager_v1 *vpm = NULL;
 static struct zwlr_virtual_pointer_v1 *vp = NULL;
 static int shmfd;
-static uint32_t *frame = NULL;
-static size_t frame_size = 0;
+static uint32_t *frame = NULL, fw = 0, fh = 0, fs = 0;
+static size_t fsz = 0;
 static bool framewritable = false, immediateredraw = false;
 static bool enterbeenpressed = false;
-static uint32_t fw = 0, fh = 0, frame_stride = 0;
 static uint32_t x = 1, y = 1, xe = 2, ye = 2;
+static enum mode mode = MODE_NORMAL;
 static uint8_t ui = 0;
 static bool uvert[UINT8_MAX];
 static bool upos[UINT8_MAX];
@@ -98,18 +103,18 @@ static void layer_shell_config(void *_, struct zwlr_layer_surface_v1 *s,
   }
   fw = width;
   fh = height;
-  frame_stride = fw * 4;
-  frame_size = frame_stride * fh;
+  fs = fw * 4;
+  fsz = fs * fh;
   zwlr_layer_surface_v1_ack_configure(s, serial);
   zwlr_layer_surface_v1_set_layer(s, ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY);
   zwlr_layer_surface_v1_set_keyboard_interactivity(
       s, ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE);
-  if (ftruncate(shmfd, frame_size) < 0) {
+  if (ftruncate(shmfd, fsz) < 0) {
     err = "failed to resize shm";
     done = true;
     return;
   }
-  frame = mmap(NULL, frame_size, PROT_READ | PROT_WRITE, MAP_SHARED, shmfd, 0);
+  frame = mmap(NULL, fsz, PROT_READ | PROT_WRITE, MAP_SHARED, shmfd, 0);
   if (frame == MAP_FAILED) {
     perror("");
     err = "failed to mmap shm";
@@ -117,9 +122,8 @@ static void layer_shell_config(void *_, struct zwlr_layer_surface_v1 *s,
     return;
   }
   framewritable = true;
-  struct wl_shm_pool *pool = wl_shm_create_pool(wlshm, shmfd, frame_size);
-  buf = wl_shm_pool_create_buffer(pool, 0, fw, fh, frame_stride,
-                                  WL_SHM_FORMAT_ARGB8888);
+  struct wl_shm_pool *pool = wl_shm_create_pool(wlshm, shmfd, fsz);
+  buf = wl_shm_pool_create_buffer(pool, 0, fw, fh, fs, WL_SHM_FORMAT_ARGB8888);
   wl_buffer_add_listener(buf, &buf_listener, NULL);
   wl_shm_pool_destroy(pool);
   draw();
@@ -276,7 +280,7 @@ int main() {
   wl_registry_destroy(reg);
   wl_display_roundtrip(disp);
   wl_display_disconnect(disp);
-  munmap(frame, frame_size);
+  munmap(frame, fsz);
   close(shmfd);
   shm_unlink(SHM_NAME);
   if (err) {
