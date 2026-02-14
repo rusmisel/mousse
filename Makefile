@@ -11,7 +11,7 @@ proto/%.h: /usr/share/%.xml
 	@mkdir -p $(shell dirname $@)
 	wayland-scanner client-header $< $@
 .PHONY: install
-install: mousse
-	install mousse "${PREFIX}/bin"
-	mkdir -p "${PREFIX}/share/man/man1"
-	install -m644 mousse.1 "${PREFIX}/share/man/man1"
+install: mousse walmousse mousse.1
+	install -Dm755 mousse "${PREFIX}/bin"
+	install -Dm755 walmousse "${PREFIX}/bin"
+	install -Dm644 mousse.1 "${PREFIX}/share/man/man1"

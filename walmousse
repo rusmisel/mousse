@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -eo pipefail
+# shellcheck disable=SC1090
+source ~/.cache/wal/colors.sh
+set -u
+export color1 color7
+mousse

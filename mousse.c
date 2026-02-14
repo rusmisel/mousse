@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
@@ -16,29 +17,33 @@
 enum mode {
   MODE_NORMAL,
   MODE_VISUAL,
+  MODECOUNT,
 };
 
-static const char *SHM_NAME = "/mousse";
-static struct wl_compositor *compositor = NULL;
-static struct wl_seat *seat = NULL;
-static struct wl_shm *wlshm = NULL;
-static struct wl_surface *surface = NULL;
-static struct wl_buffer *buf = NULL;
-static struct zwlr_layer_shell_v1 *layer_shell = NULL;
-static struct zwlr_layer_surface_v1 *layer_surface = NULL;
-static struct zwlr_virtual_pointer_manager_v1 *vpm = NULL;
-static struct zwlr_virtual_pointer_v1 *vp = NULL;
+static const char* SHM_NAME = "/mousse";
+static const char* modecolorvars[MODECOUNT] = {"color1", "color7"};
+static uint32_t modecolors[MODECOUNT] = {0xffff0000, 0xff0000ff};
+static struct wl_compositor* compositor = NULL;
+static struct wl_seat* seat = NULL;
+static struct wl_shm* wlshm = NULL;
+static struct wl_surface* surface = NULL;
+static struct wl_buffer* buf = NULL;
+static struct zwlr_layer_shell_v1* layer_shell = NULL;
+static struct zwlr_layer_surface_v1* layer_surface = NULL;
+static struct zwlr_virtual_pointer_manager_v1* vpm = NULL;
+static struct zwlr_virtual_pointer_v1* vp = NULL;
 static int shmfd;
 static uint32_t *frame = NULL, fw = 0, fh = 0, fs = 0;
 static size_t fsz = 0;
 static bool framewritable = false, immediateredraw = false;
-static bool enterbeenpressed = false;
-static uint32_t x = 1, y = 1, xe = 2, ye = 2;
+static bool enterbeenpressed = false, anchorbeensunk = false;
 static enum mode mode = MODE_NORMAL;
+static uint32_t modifiers = 0;
+static uint32_t x = 1, y = 1, xe = 2, ye = 2;
 static uint8_t ui = 0;
 static bool uvert[UINT8_MAX];
 static bool upos[UINT8_MAX];
-static char *err = NULL;
+static char* err = NULL;
 static bool done = false;
 
 static void draw() {
@@ -52,7 +57,7 @@ static void draw() {
                               yp < (y + 1) * fh / ye) ||
                              (yp == y * fh / ye && xp > (x - 1) * fw / xe &&
                               xp < (x + 1) * fw / xe))
-                                ? 0xffff0000
+                                ? modecolors[mode]
                                 : 0x00000000;
   zwlr_virtual_pointer_v1_motion_absolute(vp, 0, x, y, xe, ye);
   framewritable = false;
@@ -61,8 +66,8 @@ static void draw() {
   wl_surface_commit(surface);
 }
 
-static void global(void *_, struct wl_registry *reg, uint32_t id,
-                   const char *iface, uint32_t ver) {
+static void global(void* _, struct wl_registry* reg, uint32_t id,
+                   const char* iface, uint32_t ver) {
   if (!strcmp(wl_compositor_interface.name, iface))
     compositor = wl_registry_bind(reg, id, &wl_compositor_interface, ver);
   else if (!strcmp(wl_seat_interface.name, iface))
@@ -76,13 +81,13 @@ static void global(void *_, struct wl_registry *reg, uint32_t id,
     vpm = wl_registry_bind(reg, id, &zwlr_virtual_pointer_manager_v1_interface,
                            ver);
 }
-static void global_remove(void *_, struct wl_registry *reg, uint32_t id) {
+static void global_remove(void* _, struct wl_registry* reg, uint32_t id) {
   // TODO: panic if we depend on global
 }
 static struct wl_registry_listener reg_listener = {
     .global = global, .global_remove = global_remove};
 
-static void buf_release(void *_, struct wl_buffer *b) {
+static void buf_release(void* _, struct wl_buffer* b) {
   framewritable = true;
   if (immediateredraw) {
     immediateredraw = false;
@@ -91,7 +96,7 @@ static void buf_release(void *_, struct wl_buffer *b) {
 }
 static struct wl_buffer_listener buf_listener = {.release = buf_release};
 
-static void layer_shell_config(void *_, struct zwlr_layer_surface_v1 *s,
+static void layer_shell_config(void* _, struct zwlr_layer_surface_v1* s,
                                uint32_t serial, uint32_t width,
                                uint32_t height) {
   if (fw == width && fh == height)
@@ -122,51 +127,58 @@ static void layer_shell_config(void *_, struct zwlr_layer_surface_v1 *s,
     return;
   }
   framewritable = true;
-  struct wl_shm_pool *pool = wl_shm_create_pool(wlshm, shmfd, fsz);
+  struct wl_shm_pool* pool = wl_shm_create_pool(wlshm, shmfd, fsz);
   buf = wl_shm_pool_create_buffer(pool, 0, fw, fh, fs, WL_SHM_FORMAT_ARGB8888);
   wl_buffer_add_listener(buf, &buf_listener, NULL);
   wl_shm_pool_destroy(pool);
   draw();
 }
-static void layer_shell_closed(void *_, struct zwlr_layer_surface_v1 *s) {
+static void layer_shell_closed(void* _, struct zwlr_layer_surface_v1* s) {
   done = true;
 }
 static struct zwlr_layer_surface_v1_listener lsl = {
     .configure = layer_shell_config, .closed = layer_shell_closed};
 
-void onenter(void *_, struct wl_keyboard *keeb, uint32_t serial,
-             struct wl_surface *s, struct wl_array *keys) {}
-void onleave(void *_, struct wl_keyboard *keeb, uint32_t serial,
-             struct wl_surface *s) {}
-void onmodifiers(void *_, struct wl_keyboard *keeb, uint32_t serial,
+void onenter(void* _, struct wl_keyboard* keeb, uint32_t serial,
+             struct wl_surface* s, struct wl_array* keys) {}
+void onleave(void* _, struct wl_keyboard* keeb, uint32_t serial,
+             struct wl_surface* s) {}
+void onmodifiers(void* _, struct wl_keyboard* keeb, uint32_t serial,
                  uint32_t depressed, uint32_t latched, uint32_t locked,
-                 uint32_t keyboard) {}
+                 uint32_t keyboard) {
+  modifiers = depressed | latched | locked;
+}
 
-void onrepeatinfo(void *_, struct wl_keyboard *keeb, int32_t rate,
+void onrepeatinfo(void* _, struct wl_keyboard* keeb, int32_t rate,
                   int32_t delay) {}
-void onkeymap(void *_, struct wl_keyboard *keeb, uint32_t fmt, int32_t fd,
+void onkeymap(void* _, struct wl_keyboard* keeb, uint32_t fmt, int32_t fd,
               uint32_t size) {}
-static void onkey(void *d, struct wl_keyboard *keeb, uint32_t serial,
+static void onkey(void* d, struct wl_keyboard* keeb, uint32_t serial,
                   uint32_t time, uint32_t key, uint32_t state) {
   switch (key) {
   case KEY_ESC: {
     done = true;
     return;
   }
+  case KEY_SPACE:
   case KEY_ENTER: {
-    zwlr_virtual_pointer_v1_button(vp, 0, BTN_LEFT, state);
+    int btn = key == KEY_ENTER ? BTN_LEFT : BTN_RIGHT;
+    if (mode == MODE_NORMAL) {
+      zwlr_virtual_pointer_v1_button(vp, 0, btn, state);
+      done = enterbeenpressed && state == WL_KEYBOARD_KEY_STATE_RELEASED;
+    } else if (mode == MODE_VISUAL && state) {
+      x = 1;
+      y = 1;
+      xe = 2;
+      ye = 2;
+      ui = 0;
+      done = anchorbeensunk;
+      zwlr_virtual_pointer_v1_button(vp, 0, btn,
+                                     anchorbeensunk = !anchorbeensunk);
+    }
     zwlr_virtual_pointer_v1_frame(vp);
     if (!enterbeenpressed && state == WL_KEYBOARD_KEY_STATE_PRESSED)
       enterbeenpressed = true;
-    if (!state && enterbeenpressed)
-      done = true;
-    break;
-  }
-  case KEY_SPACE: {
-    zwlr_virtual_pointer_v1_button(vp, 0, BTN_RIGHT, state);
-    zwlr_virtual_pointer_v1_frame(vp);
-    if (!state)
-      done = true;
     break;
   }
   case KEY_H: {
@@ -226,6 +238,12 @@ static void onkey(void *d, struct wl_keyboard *keeb, uint32_t serial,
     *(uvert[ui] ? &ye : &xe) /= 2;
     break;
   }
+  case KEY_V: {
+    if (state != WL_KEYBOARD_KEY_STATE_PRESSED)
+      return;
+    done = anchorbeensunk;
+    mode = mode == MODE_VISUAL ? MODE_NORMAL : MODE_VISUAL;
+  }
   }
   draw();
 }
@@ -237,9 +255,18 @@ static struct wl_keyboard_listener kl = {.enter = onenter,
                                          .key = onkey};
 
 int main() {
+  for (int i = 0; i < MODECOUNT; i++) {
+    char* hex = getenv(modecolorvars[i]);
+    if (!hex)
+      continue;
+    if (hex[0] == '#')
+      hex++;
+    uint32_t color = strtol(hex, NULL, 16);
+    modecolors[i] = (color & 0xff000000) ? color : color | 0xff000000;
+  }
   shmfd = shm_open(SHM_NAME, O_RDWR | O_CREAT | O_EXCL, 0600);
-  struct wl_display *disp = wl_display_connect(NULL);
-  struct wl_registry *reg = wl_display_get_registry(disp);
+  struct wl_display* disp = wl_display_connect(NULL);
+  struct wl_registry* reg = wl_display_get_registry(disp);
   wl_registry_add_listener(reg, &reg_listener, NULL);
   wl_display_roundtrip(disp);
   err = !compositor    ? "missing global compositor"
@@ -255,12 +282,12 @@ int main() {
         layer_shell, surface, NULL, ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY,
         "mousse");
     zwlr_layer_surface_v1_add_listener(layer_surface, &lsl, 0);
-    struct wl_region *region = wl_compositor_create_region(compositor);
+    struct wl_region* region = wl_compositor_create_region(compositor);
     wl_region_add(region, 0, 0, 0, 0);
     wl_surface_set_input_region(surface, region);
     wl_surface_commit(surface);
     vp = zwlr_virtual_pointer_manager_v1_create_virtual_pointer(vpm, seat);
-    struct wl_keyboard *keeb = wl_seat_get_keyboard(seat);
+    struct wl_keyboard* keeb = wl_seat_get_keyboard(seat);
     wl_keyboard_add_listener(keeb, &kl, 0);
     while (!done)
       wl_display_dispatch(disp);
