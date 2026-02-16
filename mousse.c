@@ -142,7 +142,10 @@ static struct zwlr_layer_surface_v1_listener lsl = {
 void onenter(void* _, struct wl_keyboard* keeb, uint32_t serial,
              struct wl_surface* s, struct wl_array* keys) {}
 void onleave(void* _, struct wl_keyboard* keeb, uint32_t serial,
-             struct wl_surface* s) {}
+             struct wl_surface* s) {
+  err = "lost keyboard focus";
+  done = true;
+}
 void onmodifiers(void* _, struct wl_keyboard* keeb, uint32_t serial,
                  uint32_t depressed, uint32_t latched, uint32_t locked,
                  uint32_t keyboard) {
