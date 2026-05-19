@@ -21,7 +21,7 @@ enum mode {
 };
 
 static const char* SHM_NAME = "/mousse";
-static const char* modecolorvars[MODECOUNT] = {"color1", "color7"};
+static const char* modecolorvars[MODECOUNT] = {"COLOR_NORMAL", "COLOR_VISUAL"};
 static uint32_t modecolors[MODECOUNT] = {0xffff0000, 0xff0000ff};
 static struct wl_compositor* compositor = NULL;
 static struct wl_seat* seat = NULL;
@@ -142,10 +142,7 @@ static struct zwlr_layer_surface_v1_listener lsl = {
 void onenter(void* _, struct wl_keyboard* keeb, uint32_t serial,
              struct wl_surface* s, struct wl_array* keys) {}
 void onleave(void* _, struct wl_keyboard* keeb, uint32_t serial,
-             struct wl_surface* s) {
-  err = "lost keyboard focus";
-  done = true;
-}
+             struct wl_surface* s) {}
 void onmodifiers(void* _, struct wl_keyboard* keeb, uint32_t serial,
                  uint32_t depressed, uint32_t latched, uint32_t locked,
                  uint32_t keyboard) {

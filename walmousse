@@ -3,5 +3,5 @@ set -eo pipefail
 # shellcheck disable=SC1090
 source ~/.cache/wal/colors.sh
 set -u
-export color1 color7
+export COLOR_NORMAL=$color1 COLOR_VISUAL=$color7
 mousse
