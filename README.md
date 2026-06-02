@@ -10,7 +10,5 @@ depends on `wayland-protocols`, `wlr-protocols`, `clang`, `wayland-scanner` to b
 
 ## TODO
 - modifier passthrough
-- redo (C-r)
-- scrolling (C-e & C-y, maybe C-d & C-u)
 - is zz for fullscreen zoom possible? (need to read through wayland protos more)
 - multi-monitor support

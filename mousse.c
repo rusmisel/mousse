@@ -3,6 +3,7 @@
 #include "proto/wlr-protocols/unstable/wlr-virtual-pointer-unstable-v1.h"
 #include <fcntl.h>
 #include <linux/input-event-codes.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -40,7 +41,7 @@ static bool enterbeenpressed = false, anchorbeensunk = false;
 static enum mode mode = MODE_NORMAL;
 static uint32_t modifiers = 0;
 static uint32_t x = 1, y = 1, xe = 2, ye = 2;
-static uint8_t ui = 0;
+static uint8_t ui = 0, ri = 0;
 static bool uvert[UINT8_MAX];
 static bool upos[UINT8_MAX];
 static char* err = NULL;
@@ -66,13 +67,26 @@ static void draw() {
   wl_surface_commit(surface);
 }
 
+static void onseatname(void* _, struct wl_seat* s, const char* name) {}
+static void onseatcapabilities(void* _, struct wl_seat* s, uint32_t cap) {
+  if (!(cap & WL_SEAT_CAPABILITY_KEYBOARD)) {
+    done = true;
+    err = "no keyboard input";
+  }
+  // TODO: if WL_SEAT_CAPABILITY_POINTER detect move & exit
+}
+
+static struct wl_seat_listener seat_listener = {
+    .name = onseatname, .capabilities = onseatcapabilities};
+
 static void global(void* _, struct wl_registry* reg, uint32_t id,
                    const char* iface, uint32_t ver) {
   if (!strcmp(wl_compositor_interface.name, iface))
     compositor = wl_registry_bind(reg, id, &wl_compositor_interface, ver);
-  else if (!strcmp(wl_seat_interface.name, iface))
+  else if (!strcmp(wl_seat_interface.name, iface)) {
     seat = wl_registry_bind(reg, id, &wl_seat_interface, ver);
-  else if (!strcmp(wl_shm_interface.name, iface))
+    wl_seat_add_listener(seat, &seat_listener, NULL);
+  } else if (!strcmp(wl_shm_interface.name, iface))
     wlshm = wl_registry_bind(reg, id, &wl_shm_interface, ver);
   else if (!strcmp(zwlr_layer_shell_v1_interface.name, iface))
     layer_shell =
@@ -139,20 +153,22 @@ static void layer_shell_closed(void* _, struct zwlr_layer_surface_v1* s) {
 static struct zwlr_layer_surface_v1_listener lsl = {
     .configure = layer_shell_config, .closed = layer_shell_closed};
 
-void onenter(void* _, struct wl_keyboard* keeb, uint32_t serial,
-             struct wl_surface* s, struct wl_array* keys) {}
-void onleave(void* _, struct wl_keyboard* keeb, uint32_t serial,
-             struct wl_surface* s) {}
-void onmodifiers(void* _, struct wl_keyboard* keeb, uint32_t serial,
-                 uint32_t depressed, uint32_t latched, uint32_t locked,
-                 uint32_t keyboard) {
+static void onenter(void* _, struct wl_keyboard* keeb, uint32_t serial,
+                    struct wl_surface* s, struct wl_array* keys) {}
+static void onleave(void* _, struct wl_keyboard* keeb, uint32_t serial,
+                    struct wl_surface* s) {
+  // TODO: detect & exit on defocus w/out window swap false positive
+}
+static void onmodifiers(void* _, struct wl_keyboard* keeb, uint32_t serial,
+                        uint32_t depressed, uint32_t latched, uint32_t locked,
+                        uint32_t keyboard) {
   modifiers = depressed | latched | locked;
 }
 
-void onrepeatinfo(void* _, struct wl_keyboard* keeb, int32_t rate,
-                  int32_t delay) {}
-void onkeymap(void* _, struct wl_keyboard* keeb, uint32_t fmt, int32_t fd,
-              uint32_t size) {}
+static void onrepeatinfo(void* _, struct wl_keyboard* keeb, int32_t rate,
+                         int32_t delay) {}
+static void onkeymap(void* _, struct wl_keyboard* keeb, uint32_t fmt,
+                     int32_t fd, uint32_t size) {}
 static void onkey(void* d, struct wl_keyboard* keeb, uint32_t serial,
                   uint32_t time, uint32_t key, uint32_t state) {
   switch (key) {
@@ -162,6 +178,7 @@ static void onkey(void* d, struct wl_keyboard* keeb, uint32_t serial,
   }
   case KEY_SPACE:
   case KEY_ENTER: {
+    // TODO: modifier passthrough
     int btn = key == KEY_ENTER ? BTN_LEFT : BTN_RIGHT;
     if (mode == MODE_NORMAL) {
       zwlr_virtual_pointer_v1_button(vp, 0, btn, state);
@@ -181,56 +198,66 @@ static void onkey(void* d, struct wl_keyboard* keeb, uint32_t serial,
       enterbeenpressed = true;
     break;
   }
+  case KEY_Y:
+  case KEY_E: {
+    if (state != WL_KEYBOARD_KEY_STATE_PRESSED || modifiers != 4)
+      return;
+    zwlr_virtual_pointer_v1_axis_discrete(
+        vp, 0, WL_POINTER_AXIS_VERTICAL_SCROLL, 1, key == KEY_E ? 1 : -1);
+    zwlr_virtual_pointer_v1_frame(vp);
+    fprintf(stderr, "axis\n");
+    break;
+  }
   case KEY_H: {
-    if (state != WL_KEYBOARD_KEY_STATE_PRESSED)
+    if (state != WL_KEYBOARD_KEY_STATE_PRESSED || modifiers)
       return;
     x = x * 2 - 1;
     xe *= 2;
     uvert[ui] = false;
     upos[ui] = false;
-    ui++;
+    ri = ++ui;
     if (!ui)
       done = true;
     break;
   }
   case KEY_J: {
-    if (state != WL_KEYBOARD_KEY_STATE_PRESSED)
+    if (state != WL_KEYBOARD_KEY_STATE_PRESSED || modifiers)
       return;
     y = y * 2 + 1;
     ye *= 2;
     uvert[ui] = true;
     upos[ui] = true;
-    ui++;
+    ri = ++ui;
     if (!ui)
       done = true;
     break;
   }
   case KEY_K: {
-    if (state != WL_KEYBOARD_KEY_STATE_PRESSED)
+    if (state != WL_KEYBOARD_KEY_STATE_PRESSED || modifiers)
       return;
     y = y * 2 - 1;
     ye *= 2;
     uvert[ui] = true;
     upos[ui] = false;
-    ui++;
+    ri = ++ui;
     if (!ui)
       done = true;
     break;
   }
   case KEY_L: {
-    if (state != WL_KEYBOARD_KEY_STATE_PRESSED)
+    if (state != WL_KEYBOARD_KEY_STATE_PRESSED || modifiers)
       return;
     x = x * 2 + 1;
     xe *= 2;
     uvert[ui] = false;
     upos[ui] = true;
-    ui++;
+    ri = ++ui;
     if (!ui)
       done = true;
     break;
   }
   case KEY_U: {
-    if (!ui || state != WL_KEYBOARD_KEY_STATE_PRESSED)
+    if (state != WL_KEYBOARD_KEY_STATE_PRESSED || modifiers || !ui)
       return;
     ui--;
     *(uvert[ui] ? &y : &x) += upos[ui] ? -1 : 1;
@@ -238,8 +265,17 @@ static void onkey(void* d, struct wl_keyboard* keeb, uint32_t serial,
     *(uvert[ui] ? &ye : &xe) /= 2;
     break;
   }
+  case KEY_R: {
+    if (state != WL_KEYBOARD_KEY_STATE_PRESSED || modifiers != 4 || ui == ri)
+      return;
+    *(uvert[ui] ? &ye : &xe) *= 2;
+    *(uvert[ui] ? &y : &x) *= 2;
+    *(uvert[ui] ? &y : &x) += upos[ui] ? 1 : -1;
+    ui++;
+    break;
+  }
   case KEY_V: {
-    if (state != WL_KEYBOARD_KEY_STATE_PRESSED)
+    if (state != WL_KEYBOARD_KEY_STATE_PRESSED || modifiers)
       return;
     done = anchorbeensunk;
     mode = mode == MODE_VISUAL ? MODE_NORMAL : MODE_VISUAL;
@@ -254,7 +290,12 @@ static struct wl_keyboard_listener kl = {.enter = onenter,
                                          .keymap = onkeymap,
                                          .key = onkey};
 
+static void donesig(int _) { done = true; }
+
 int main() {
+  signal(SIGINT, donesig);
+  signal(SIGTERM, donesig);
+  signal(SIGKILL, donesig);
   for (int i = 0; i < MODECOUNT; i++) {
     char* hex = getenv(modecolorvars[i]);
     if (!hex)
@@ -276,12 +317,18 @@ int main() {
         : !vpm         ? "missing global virtual pointer manager"
         : shmfd < 0    ? "mousse appears to be running already"
                        : NULL;
-  if (!err) {
+  if (!err && !done) {
     surface = wl_compositor_create_surface(compositor);
     layer_surface = zwlr_layer_shell_v1_get_layer_surface(
         layer_shell, surface, NULL, ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY,
         "mousse");
     zwlr_layer_surface_v1_add_listener(layer_surface, &lsl, 0);
+    zwlr_layer_surface_v1_set_anchor(layer_surface,
+                                     ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP |
+                                         ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT |
+                                         ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
+                                         ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
+    zwlr_layer_surface_v1_set_exclusive_zone(layer_surface, -1);
     struct wl_region* region = wl_compositor_create_region(compositor);
     wl_region_add(region, 0, 0, 0, 0);
     wl_surface_set_input_region(surface, region);
@@ -290,7 +337,10 @@ int main() {
     struct wl_keyboard* keeb = wl_seat_get_keyboard(seat);
     wl_keyboard_add_listener(keeb, &kl, 0);
     while (!done)
-      wl_display_dispatch(disp);
+      if (wl_display_dispatch(disp) < 0) {
+        err = strerror(wl_display_get_error(disp));
+        done = true;
+      }
     if (buf)
       wl_buffer_destroy(buf);
     wl_keyboard_destroy(keeb);
