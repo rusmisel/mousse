@@ -1,6 +1,8 @@
 # mousse
 vim for your mouse.
 
+![demo gif](mousse.gif)
+
 ## installation
 [`mousse-git` on the aur](https://aur.archlinux.org/packages/mousse-git) (thanks to [@mhegreberg](https://hegreberg.io))
 
